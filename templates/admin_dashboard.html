@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}แดชบอร์ด Admin{% endblock %}
+{% block content %}
+<style>
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .stat-box {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px;
+        background: #fffaf5;
+    }
+    .stat-box .stat-label { color: var(--muted); font-size: 0.85em; margin-bottom: 6px; }
+    .stat-box .stat-value { font-size: 1.6em; font-weight: 700; }
+    .stat-box.warning { border-left: 6px solid #e8590c; background: #fff5eb; }
+
+    .admin-nav { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+
+    .inv-row-low td { background: #fff5eb; }
+    .inline-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .inline-form input[type="number"] { width: 90px; }
+
+    /* จัดฟอร์มบันทึก + ปุ่มลบให้อยู่แถวเดียวกัน */
+    .action-cell { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .action-cell form { margin: 0; }
+    .action-cell .inline-form { flex-wrap: nowrap; }
+    .action-cell button { margin-top: 0; }
+
+    /* Modal เพิ่มวัตถุดิบ (ใช้ <dialog> มาตรฐานของเบราว์เซอร์ ไม่พึ่ง Bootstrap เพื่อไม่ให้ CSS ชนกับดีไซน์เดิม) */
+    .section-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+    .section-head h3 { margin: 0; }
+    dialog.modal {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0;
+        width: min(460px, calc(100% - 32px));
+        background: var(--bg-card);
+        color: var(--ink);
+        box-shadow: 0 20px 50px rgba(42,33,24,0.35);
+    }
+    dialog.modal::backdrop { background: rgba(42,33,24,0.55); }
+    .modal-head { padding: 18px 22px 0; border-top: 4px solid var(--accent); border-radius: var(--radius) var(--radius) 0 0; }
+    .modal-body { padding: 8px 22px 6px; }
+    .modal-body .field { margin-bottom: 14px; }
+    .modal-body .field label { display:block; margin-bottom:6px; }
+    .modal-body .field input { width:100%; }
+    .modal-body .field-row { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .modal-foot { display:flex; justify-content:flex-end; gap:8px; padding: 6px 22px 20px; }
+    .modal-foot button { margin-top: 0; }
+</style>
+
+<div class="card">
+    <h2>📊 แดชบอร์ดผู้ดูแลระบบ</h2>
+    <p class="muted">สรุปยอดขาย เมนูขายดี มูลค่าสต็อก และการแจ้งเตือนวัตถุดิบใกล้หมด</p>
+
+    <div class="admin-nav">
+        <a class="btn" href="{{ url_for('admin_menu_list') }}">🍽️ จัดการเมนูอาหาร</a>
+        <a class="btn" href="{{ url_for('staff_dashboard') }}">🍴 จัดการโต๊ะ</a>
+        <a class="btn" href="{{ url_for('kitchen_display') }}">🍳 หน้าครัว</a>
+        <a class="btn" href="{{ url_for('logout') }}">ออกจากระบบ</a>
+    </div>
+
+    <div class="stat-grid">
+        <div class="stat-box">
+            <div class="stat-label">ยอดขายวันนี้ ({{ daily_sales.date }})</div>
+            <div class="stat-value">{{ "%.2f"|format(daily_sales.total_sales) }} บาท</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">จำนวนบิลวันนี้</div>
+            <div class="stat-value">{{ daily_sales.bill_count }} บิล</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">มูลค่าสต็อกคงเหลือ</div>
+            <div class="stat-value">{{ "%.2f"|format(stock_value) }} บาท</div>
+        </div>
+        <div class="stat-box {% if low_stock_alerts|length > 0 %}warning{% endif %}">
+            <div class="stat-label">วัตถุดิบต่ำกว่าจุดสั่งซื้อ</div>
+            <div class="stat-value">{{ low_stock_alerts|length }} รายการ</div>
+        </div>
+    </div>
+</div>
+
+{% if low_stock_alerts|length > 0 %}
+<div class="card">
+    <h3>⚠️ แจ้งเตือน: วัตถุดิบต่ำกว่าจุดสั่งซื้อเพิ่ม (Reorder Point)</h3>
+    <table>
+        <thead><tr><th>วัตถุดิบ</th><th>คงเหลือ</th><th>จุดสั่งซื้อเพิ่ม</th><th>หน่วย</th></tr></thead>
+        <tbody>
+        {% for a in low_stock_alerts %}
+            <tr class="inv-row-low">
+                <td>{{ a.name }}</td>
+                <td>{{ "%.2f"|format(a.stock_qty) }}</td>
+                <td>{{ "%.2f"|format(a.reorder_point) }}</td>
+                <td>{{ a.unit }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>🔥 เมนูขายดี (สะสมจากบิลที่เช็คบิลแล้วทั้งหมด)</h3>
+    {% if best_sellers|length == 0 %}
+        <p class="muted">ยังไม่มีข้อมูลยอดขาย</p>
+    {% else %}
+    <table>
+        <thead><tr><th>#</th><th>เมนู</th><th>จำนวนที่ขายได้</th><th>รายได้รวม</th></tr></thead>
+        <tbody>
+        {% for item in best_sellers %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.total_qty }}</td>
+                <td>{{ "%.2f"|format(item.total_revenue) }} บาท</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="section-head">
+        <h3>📦 จัดการสต็อกวัตถุดิบ</h3>
+        <button type="button" id="open-add-ingredient">➕ เพิ่มวัตถุดิบใหม่</button>
+    </div>
+    <p class="muted">ปรับจำนวนสต็อกคงเหลือและจุดสั่งซื้อเพิ่ม (Reorder Point) ของแต่ละวัตถุดิบได้ที่นี่</p>
+    {% if inventory|length == 0 %}
+        <p class="muted">ยังไม่มีข้อมูลวัตถุดิบในระบบ</p>
+    {% else %}
+    <table>
+        <thead>
+            <tr>
+                <th>วัตถุดิบ</th><th>คงเหลือ</th><th>จุดสั่งซื้อเพิ่ม</th><th>หน่วย</th>
+                <th>ต้นทุน/หน่วย</th><th>แก้ไข</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for ing in inventory %}
+            <tr class="{% if ing.stock_qty < ing.reorder_point %}inv-row-low{% endif %}">
+                <td>{{ ing.name }}</td>
+                <td>{{ "%.2f"|format(ing.stock_qty) }}</td>
+                <td>{{ "%.2f"|format(ing.reorder_point) }}</td>
+                <td>{{ ing.unit }}</td>
+                <td>{{ "%.2f"|format(ing.cost_per_unit) }} บาท</td>
+                <td>
+                    <div class="action-cell">
+                        <form class="inline-form" method="POST"
+                              action="{{ url_for('admin_ingredient_update', ingredient_id=ing.ingredient_id) }}">
+                            <input type="number" step="0.01" min="0" name="stock_qty" value="{{ ing.stock_qty }}" required>
+                            <input type="number" step="0.01" min="0" name="reorder_point" value="{{ ing.reorder_point }}" required>
+                            <button type="submit">บันทึก</button>
+                        </form>
+                        <form method="POST"
+                              action="{{ url_for('admin_ingredient_delete', ingredient_id=ing.ingredient_id) }}"
+                              onsubmit="return confirm('ยืนยันลบวัตถุดิบ &quot;{{ ing.name }}&quot; ออกจากระบบถาวร? การลบนี้ไม่สามารถย้อนกลับได้');">
+                            <button type="submit" class="btn-danger">🗑️ ลบ</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>🍴 สถานะโต๊ะทั้งหมด</h3>
+    {% if tables|length == 0 %}
+        <p class="muted">ยังไม่มีข้อมูลโต๊ะในระบบ</p>
+    {% else %}
+    <table>
+        <thead><tr><th>โต๊ะ</th><th>สถานะ</th></tr></thead>
+        <tbody>
+        {% for t in tables %}
+            <tr>
+                <td>{{ t.table_name }}</td>
+                <td><span class="badge" style="background:#e9ecef; color:#495057;">{{ t.status }}</span></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+<dialog class="modal" id="add-ingredient-modal" aria-labelledby="add-ingredient-title">
+    <form method="POST" action="{{ url_for('admin_inventory_add') }}" id="add-ingredient-form">
+        <div class="modal-head">
+            <h3 id="add-ingredient-title">➕ เพิ่มวัตถุดิบใหม่</h3>
+            <p class="muted">ระบบจะสร้างรหัสวัตถุดิบ (เช่น ING005) ให้อัตโนมัติ</p>
+        </div>
+        <div class="modal-body">
+            <div class="field">
+                <label for="ing-name">ชื่อวัตถุดิบ</label>
+                <input type="text" id="ing-name" name="name" maxlength="100" required placeholder="เช่น ไข่ไก่, กระเทียม">
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label for="ing-stock">จำนวนเริ่มต้น</label>
+                    <input type="number" id="ing-stock" name="stock_qty" step="0.01" min="0" value="0" required>
+                </div>
+                <div class="field">
+                    <label for="ing-unit">หน่วยนับ</label>
+                    <input type="text" id="ing-unit" name="unit" maxlength="20" required list="unit-suggestions" placeholder="เช่น กก., ลิตร">
+                    <datalist id="unit-suggestions">
+                        <option value="กก."><option value="กรัม"><option value="ลิตร">
+                        <option value="มล."><option value="ฟอง"><option value="ชิ้น"><option value="ขวด"><option value="ถุง">
+                    </datalist>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label for="ing-reorder">จุดสั่งซื้อเพิ่ม</label>
+                    <input type="number" id="ing-reorder" name="reorder_point" step="0.01" min="0" value="0" required>
+                </div>
+                <div class="field">
+                    <label for="ing-cost">ต้นทุนต่อหน่วย (บาท)</label>
+                    <input type="number" id="ing-cost" name="cost_per_unit" step="0.01" min="0" value="0" required>
+                </div>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button type="button" class="btn-secondary" id="cancel-add-ingredient">ยกเลิก</button>
+            <button type="submit">💾 บันทึกวัตถุดิบ</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+    (function () {
+        var modal = document.getElementById('add-ingredient-modal');
+        var form = document.getElementById('add-ingredient-form');
+        document.getElementById('open-add-ingredient').addEventListener('click', function () {
+            form.reset();
+            modal.showModal();
+            document.getElementById('ing-name').focus();
+        });
+        document.getElementById('cancel-add-ingredient').addEventListener('click', function () { modal.close(); });
+        // คลิกพื้นหลังมืดนอกกล่อง = ปิด modal
+        modal.addEventListener('click', function (e) { if (e.target === modal) modal.close(); });
+        // ฝั่ง server ยัง validate ซ้ำเสมอ (ห้ามเชื่อฝั่ง client)
+    })();
+</script>
+{% endblock %}

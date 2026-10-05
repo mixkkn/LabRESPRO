@@ -1,0 +1,49 @@
+[
+  {
+    "menu_id": "M001",
+    "name": "ผัดกะเพราหมูสับ",
+    "price": 50.0,
+    "category": "จานเดียว",
+    "is_available": true,
+    "recipe": [
+      {
+        "ingredient_id": "ING001",
+        "qty_used": 0.15
+      },
+      {
+        "ingredient_id": "ING002",
+        "qty_used": 0.02
+      },
+      {
+        "ingredient_id": "ING003",
+        "qty_used": 0.05
+      }
+    ]
+  },
+  {
+    "menu_id": "M002",
+    "name": "ข้าวผัดหมู",
+    "price": 45.0,
+    "category": "จานเดียว",
+    "is_available": true,
+    "recipe": [
+      {
+        "ingredient_id": "ING001",
+        "qty_used": 0.12
+      },
+      {
+        "ingredient_id": "ING004",
+        "qty_used": 0.2
+      }
+    ]
+  },
+  {
+    "menu_id": "M003",
+    "name": "เนื้อพี่เสก",
+    "price": 1200.0,
+    "category": "จานเดียว",
+    "is_available": true,
+    "image": "https://res.cloudinary.com/pmbes3y7/image/upload/v1791217962/restaurant_menu/nbsx7yy6rkqja0xahjtf.jpg",
+    "recipe": []
+  }
+]
